@@ -1,7 +1,9 @@
 package redis
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"strconv"
@@ -572,6 +574,65 @@ func (s *Redis) GetCtx(ctx context.Context, key string) (string, error) {
 		return val, nil
 	}
 }
+
+// add by ljd 10512203@qq.com --------------------------------------
+// GetObjCtx  get interface{} value from redis
+func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return "", err
+	}
+	if val, err := conn.Get(ctx, key).Result(); errors.Is(err, red.Nil) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	} else {
+		value, err := deserialize([]byte(val))
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+}
+
+// SetObjCtx   set interface{} value from redis
+func (s *Redis) SetObjCtx(ctx context.Context, key string, value interface{}) error {
+	conn, err := getRedis(s)
+	if err != nil {
+		return err
+	}
+	valueBytes, err := serialize(value)
+	if err != nil {
+		return err
+	}
+	return conn.Set(ctx, key, valueBytes, 0).Err()
+}
+
+// interface to byte[]
+func serialize(value interface{}) ([]byte, error) {
+	buf := bytes.Buffer{}
+	enc := gob.NewEncoder(&buf)
+	gob.Register(value)
+	err := enc.Encode(&value)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// byte[] to interface{}
+func deserialize(valueBytes []byte) (interface{}, error) {
+	var value interface{}
+	buf := bytes.NewBuffer(valueBytes)
+	dec := gob.NewDecoder(buf)
+	err := dec.Decode(&value)
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// add by ljd 10512203@qq.com ---end-----------------------------------------
 
 // GetBit is the implementation of redis getbit command.
 func (s *Redis) GetBit(key string, offset int64) (int, error) {
