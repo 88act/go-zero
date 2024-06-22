@@ -583,7 +583,7 @@ func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) 
 		return "", err
 	}
 	if val, err := conn.Get(ctx, key).Result(); errors.Is(err, red.Nil) {
-		return nil, nil
+		return nil, err
 	} else if err != nil {
 		return nil, err
 	} else {
@@ -596,7 +596,7 @@ func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) 
 }
 
 // SetObjCtx   set interface{} value from redis
-func (s *Redis) SetObjCtx(ctx context.Context, key string, value interface{}) error {
+func (s *Redis) SetObjCtx(ctx context.Context, key string, value interface{}, second int) error {
 	conn, err := getRedis(s)
 	if err != nil {
 		return err
@@ -605,7 +605,8 @@ func (s *Redis) SetObjCtx(ctx context.Context, key string, value interface{}) er
 	if err != nil {
 		return err
 	}
-	return conn.Set(ctx, key, valueBytes, 0).Err()
+
+	return conn.Set(ctx, key, valueBytes, time.Duration(second)*time.Second).Err()
 }
 
 // interface to byte[]
