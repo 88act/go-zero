@@ -605,8 +605,12 @@ func (s *Redis) SetObjCtx(ctx context.Context, key string, value interface{}, se
 	if err != nil {
 		return err
 	}
+	if second > 0 {
+		return conn.Set(ctx, key, valueBytes, time.Duration(second)*time.Second).Err()
+	} else {
+		return conn.Set(ctx, key, valueBytes, 0).Err()
+	}
 
-	return conn.Set(ctx, key, valueBytes, time.Duration(second)*time.Second).Err()
 }
 
 // interface to byte[]
@@ -631,6 +635,33 @@ func deserialize(valueBytes []byte) (interface{}, error) {
 		return nil, err
 	}
 	return value, nil
+}
+
+// 删除具有特定前缀的多个键
+func (s *Redis) DeleteKeyPre(ctx context.Context, prefix string) (num int, err error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return 0, err
+	}
+	keysToDelete, err := conn.Keys(ctx, prefix+"*").Result()
+	if err != nil {
+		return 0, err
+	}
+	num = len(keysToDelete)
+	if num > 0 {
+		// 使用pipeline批量删除所有匹配的键
+		pipeline := conn.Pipeline()
+		for _, key := range keysToDelete {
+			logx.Infof(" 批量删除 key =%s ", key)
+			pipeline.Del(ctx, key)
+		}
+		_, err = pipeline.Exec(ctx)
+		if err != nil {
+			logx.Errorf(" 批量删除 err =%s ", err.Error())
+			return 0, err
+		}
+	}
+	return num, nil
 }
 
 // add by ljd 10512203@qq.com ---end-----------------------------------------
