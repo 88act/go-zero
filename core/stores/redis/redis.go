@@ -578,6 +578,7 @@ func (s *Redis) GetCtx(ctx context.Context, key string) (string, error) {
 // add by ljd 10512203@qq.com --------------------------------------
 // GetObjCtx  get interface{} value from redis
 func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) {
+	fmt.Println("rides GetObjCtx=====key==", key)
 	conn, err := getRedis(s)
 	if err != nil {
 		return "", err
