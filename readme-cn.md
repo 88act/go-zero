@@ -118,18 +118,13 @@ GO111MODULE=on GOPROXY=https://goproxy.cn/,direct go get -u github.com/zeromicro
     # For Mac
     brew install goctl
     
-    # docker for amd64 architecture
+    # docker for all platforms
     docker pull kevinwan/goctl
-    # run goctl like
+    # run goctl
     docker run --rm -it -v `pwd`:/app kevinwan/goctl --help
-    
-    # docker for arm64(Mac) architecture
-    docker pull kevinwan/goctl:latest-arm64
-    # run goctl like
-    docker run --rm -it -v `pwd`:/app kevinwan/goctl:latest-arm64 --help
     ```
     
-    确保 goctl 可执行
+    确保 goctl 可执行，并且在 $PATH 环境变量里。
     
 2. 快速生成 api 服务
 
@@ -333,8 +328,8 @@ go-zero 收录在 [CNCF Cloud Native 云原生技术全景图](https://landscape
 
 <img src="https://raw.githubusercontent.com/zeromicro/zero-doc/main/doc/images/wechat.jpg" alt="wechat" width="300" />
 
-## 13. 赞助一下👍
+## 13. 知识星球
 
-如果觉得项目有帮助，可以请作者喝杯咖啡 🍹
+官方团队运营的知识星球
 
-<img src="https://raw.githubusercontent.com/zeromicro/zero-doc/main/doc/images/sponsor.png" alt="wechat" width="300" />
+<img src="https://raw.githubusercontent.com/zeromicro/zero-doc/main/doc/images/zsxq.jpg" alt="知识星球" width="300" />
