@@ -12,6 +12,7 @@ import (
 	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/breaker"
 	"github.com/zeromicro/go-zero/core/errorx"
+	"github.com/zeromicro/go-zero/core/logc"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/mapping"
 	"github.com/zeromicro/go-zero/core/syncx"
@@ -167,11 +168,11 @@ func NewScript(script string) *Script {
 // add by ljd 10512203@qq.com --------------------------------------
 // GetObjCtx  get interface{} value from redis
 func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) {
-	fmt.Println("rides GetObjCtx=====key==", key)
 	conn, err := getRedis(s)
 	if err != nil {
 		return "", err
 	}
+
 	if val, err := conn.Get(ctx, key).Result(); errors.Is(err, red.Nil) {
 		return nil, err
 	} else if err != nil {
@@ -181,6 +182,7 @@ func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) 
 		if err != nil {
 			return nil, err
 		}
+		logc.Info(ctx, "==get from redis key==", key)
 		return value, nil
 	}
 }
@@ -675,6 +677,7 @@ func (s *Redis) GetCtx(ctx context.Context, key string) (string, error) {
 	} else if err != nil {
 		return "", err
 	} else {
+		logc.Info(ctx, "==get from redis ，string key==", key)
 		return val, nil
 	}
 }
