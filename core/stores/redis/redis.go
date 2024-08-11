@@ -1,9 +1,7 @@
 package redis
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"strconv"
@@ -12,7 +10,6 @@ import (
 	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/breaker"
 	"github.com/zeromicro/go-zero/core/errorx"
-	"github.com/zeromicro/go-zero/core/logc"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/mapping"
 	"github.com/zeromicro/go-zero/core/syncx"
@@ -159,99 +156,6 @@ func newRedis(addr string, opts ...Option) *Redis {
 
 	return r
 }
-
-// add by ljd 10512203@qq.com --------------------------------------
-// GetObjCtx  get interface{} value from redis
-func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) {
-	conn, err := getRedis(s)
-	if err != nil {
-		return "", err
-	}
-
-	if val, err := conn.Get(ctx, key).Result(); errors.Is(err, red.Nil) {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	} else {
-		value, err := deserialize([]byte(val))
-		if err != nil {
-			return nil, err
-		}
-		logc.Info(ctx, "==get from redis key==", key)
-		return value, nil
-	}
-}
-
-// SetObjCtx   set interface{} value from redis
-func (s *Redis) SetObjCtx(ctx context.Context, key string, value interface{}, second int) error {
-	conn, err := getRedis(s)
-	if err != nil {
-		return err
-	}
-	valueBytes, err := serialize(value)
-	if err != nil {
-		return err
-	}
-	if second > 0 {
-		return conn.Set(ctx, key, valueBytes, time.Duration(second)*time.Second).Err()
-	} else {
-		return conn.Set(ctx, key, valueBytes, 0).Err()
-	}
-
-}
-
-// interface to byte[]
-func serialize(value interface{}) ([]byte, error) {
-	buf := bytes.Buffer{}
-	enc := gob.NewEncoder(&buf)
-	gob.Register(value)
-	err := enc.Encode(&value)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// byte[] to interface{}
-func deserialize(valueBytes []byte) (interface{}, error) {
-	var value interface{}
-	buf := bytes.NewBuffer(valueBytes)
-	dec := gob.NewDecoder(buf)
-	err := dec.Decode(&value)
-	if err != nil {
-		return nil, err
-	}
-	return value, nil
-}
-
-// 删除具有特定前缀的多个键
-func (s *Redis) DeleteKeyPre(ctx context.Context, prefix string) (num int, err error) {
-	conn, err := getRedis(s)
-	if err != nil {
-		return 0, err
-	}
-	keysToDelete, err := conn.Keys(ctx, prefix+"*").Result()
-	if err != nil {
-		return 0, err
-	}
-	num = len(keysToDelete)
-	if num > 0 {
-		// 使用pipeline批量删除所有匹配的键
-		pipeline := conn.Pipeline()
-		for _, key := range keysToDelete {
-			logx.Infof(" 批量删除 key =%s ", key)
-			pipeline.Del(ctx, key)
-		}
-		_, err = pipeline.Exec(ctx)
-		if err != nil {
-			logx.Errorf(" 批量删除 err =%s ", err.Error())
-			return 0, err
-		}
-	}
-	return num, nil
-}
-
-// add by ljd 10512203@qq.com ---end-----------------------------------------
 
 // NewScript returns a new Script instance.
 func NewScript(script string) *Script {

@@ -54,7 +54,7 @@ func (a *Analyzer) astTypeToSpec(in ast.DataType) (spec.Type, error) {
 			return nil, ast.SyntaxError(v.Pos(), "unsupported empty struct")
 		}
 
-		return spec.DefineStruct{
+		return spec.NestedStruct{
 			RawName: v.RawText(),
 			Members: members,
 		}, nil
@@ -78,7 +78,7 @@ func (a *Analyzer) astTypeToSpec(in ast.DataType) (spec.Type, error) {
 
 		return spec.MapType{
 			RawName: v.RawText(),
-			Key:     v.RawText(),
+			Key:     v.Key.RawText(),
 			Value:   value,
 		}, nil
 	case *ast.PointerDataType:
@@ -347,14 +347,12 @@ func (a *Analyzer) fillTypes() error {
 			for _, member := range v.Members {
 				switch v := member.Type.(type) {
 				case spec.DefineStruct:
-					if !v.IsNestedStruct() {
-						tp, err := a.findDefinedType(v.RawName)
-						if err != nil {
-							return err
-						}
-
-						member.Type = tp
+					tp, err := a.findDefinedType(v.RawName)
+					if err != nil {
+						return err
 					}
+
+					member.Type = tp
 				}
 				members = append(members, member)
 			}
