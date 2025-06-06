@@ -1,9 +1,7 @@
 package redis
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"strconv"
@@ -12,7 +10,6 @@ import (
 	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/breaker"
 	"github.com/zeromicro/go-zero/core/errorx"
-	"github.com/zeromicro/go-zero/core/logc"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/mapping"
 	"github.com/zeromicro/go-zero/core/syncx"
@@ -58,6 +55,7 @@ type (
 	Redis struct {
 		Addr  string
 		Type  string
+		User  string
 		Pass  string
 		tls   bool
 		brk   breaker.Breaker
@@ -129,6 +127,9 @@ func NewRedis(conf RedisConf, opts ...Option) (*Redis, error) {
 	if conf.Type == ClusterType {
 		opts = append([]Option{Cluster()}, opts...)
 	}
+	if len(conf.User) > 0 {
+		opts = append([]Option{WithUser(conf.User)}, opts...)
+	}
 	if len(conf.Pass) > 0 {
 		opts = append([]Option{WithPass(conf.Pass)}, opts...)
 	}
@@ -164,99 +165,6 @@ func newRedis(addr string, opts ...Option) *Redis {
 func NewScript(script string) *Script {
 	return red.NewScript(script)
 }
-
-// add by ljd 10512203@qq.com --------------------------------------
-// GetObjCtx  get interface{} value from redis
-func (s *Redis) GetObjCtx(ctx context.Context, key string) (interface{}, error) {
-	conn, err := getRedis(s)
-	if err != nil {
-		return "", err
-	}
-
-	if val, err := conn.Get(ctx, key).Result(); errors.Is(err, red.Nil) {
-		return nil, err
-	} else if err != nil {
-		return nil, err
-	} else {
-		value, err := deserialize([]byte(val))
-		if err != nil {
-			return nil, err
-		}
-		logc.Info(ctx, "==get from redis key==", key)
-		return value, nil
-	}
-}
-
-// SetObjCtx   set interface{} value from redis
-func (s *Redis) SetObjCtx(ctx context.Context, key string, value interface{}, second int) error {
-	conn, err := getRedis(s)
-	if err != nil {
-		return err
-	}
-	valueBytes, err := serialize(value)
-	if err != nil {
-		return err
-	}
-	if second > 0 {
-		return conn.Set(ctx, key, valueBytes, time.Duration(second)*time.Second).Err()
-	} else {
-		return conn.Set(ctx, key, valueBytes, 0).Err()
-	}
-
-}
-
-// interface to byte[]
-func serialize(value interface{}) ([]byte, error) {
-	buf := bytes.Buffer{}
-	enc := gob.NewEncoder(&buf)
-	gob.Register(value)
-	err := enc.Encode(&value)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// byte[] to interface{}
-func deserialize(valueBytes []byte) (interface{}, error) {
-	var value interface{}
-	buf := bytes.NewBuffer(valueBytes)
-	dec := gob.NewDecoder(buf)
-	err := dec.Decode(&value)
-	if err != nil {
-		return nil, err
-	}
-	return value, nil
-}
-
-// 删除具有特定前缀的多个键
-func (s *Redis) DeleteKeyPre(ctx context.Context, prefix string) (num int, err error) {
-	conn, err := getRedis(s)
-	if err != nil {
-		return 0, err
-	}
-	keysToDelete, err := conn.Keys(ctx, prefix+"*").Result()
-	if err != nil {
-		return 0, err
-	}
-	num = len(keysToDelete)
-	if num > 0 {
-		// 使用pipeline批量删除所有匹配的键
-		pipeline := conn.Pipeline()
-		for _, key := range keysToDelete {
-			logx.Infof(" 批量删除 key =%s ", key)
-			pipeline.Del(ctx, key)
-		}
-		_, err = pipeline.Exec(ctx)
-		if err != nil {
-			logx.Errorf(" 批量删除 err =%s ", err.Error())
-			return 0, err
-		}
-	}
-	return num, nil
-}
-
-// add by ljd 10512203@qq.com ---end-----------------------------------------
 
 // BitCount is redis bitcount command implementation.
 func (s *Redis) BitCount(key string, start, end int64) (int64, error) {
@@ -699,6 +607,28 @@ func (s *Redis) GetBitCtx(ctx context.Context, key string, offset int64) (int, e
 	}
 
 	return int(v), nil
+}
+
+// GetDel is the implementation of redis getdel command.
+// Available since: redis version 6.2.0
+func (s *Redis) GetDel(key string) (string, error) {
+	return s.GetDelCtx(context.Background(), key)
+}
+
+// GetDelCtx is the implementation of redis getdel command.
+// Available since: redis version 6.2.0
+func (s *Redis) GetDelCtx(ctx context.Context, key string) (string, error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return "", err
+	}
+
+	val, err := conn.GetDel(ctx, key).Result()
+	if errors.Is(err, red.Nil) {
+		return "", nil
+	}
+
+	return val, err
 }
 
 // GetSet is the implementation of redis getset command.
@@ -1293,6 +1223,18 @@ func (s *Redis) PipelinedCtx(ctx context.Context, fn func(Pipeliner) error) erro
 	return err
 }
 
+func (s *Redis) Publish(channel string, message interface{}) (int64, error) {
+	return s.PublishCtx(context.Background(), channel, message)
+}
+
+func (s *Redis) PublishCtx(ctx context.Context, channel string, message interface{}) (int64, error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return 0, err
+	}
+	return conn.Publish(ctx, channel, message).Result()
+}
+
 // Rpop is the implementation of redis rpop command.
 func (s *Redis) Rpop(key string) (string, error) {
 	return s.RpopCtx(context.Background(), key)
@@ -1341,6 +1283,18 @@ func (s *Redis) RpushCtx(ctx context.Context, key string, values ...any) (int, e
 	}
 
 	return int(v), nil
+}
+
+func (s *Redis) RPopLPush(source string, destination string) (string, error) {
+	return s.RPopLPushCtx(context.Background(), source, destination)
+}
+
+func (s *Redis) RPopLPushCtx(ctx context.Context, source string, destination string) (string, error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return "", err
+	}
+	return conn.RPopLPush(ctx, source, destination).Result()
 }
 
 // Sadd is the implementation of redis sadd command.
@@ -1739,6 +1693,26 @@ func (s *Redis) TtlCtx(ctx context.Context, key string) (int, error) {
 	// -2 means key does not exist
 	// -1 means key exists but has no expire
 	return int(duration), nil
+}
+
+func (s *Redis) TxPipeline() (pipe Pipeliner, err error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return nil, err
+	}
+	return conn.TxPipeline(), nil
+}
+
+func (s *Redis) Unlink(keys ...string) (int64, error) {
+	return s.UnlinkCtx(context.Background(), keys...)
+}
+
+func (s *Redis) UnlinkCtx(ctx context.Context, keys ...string) (int64, error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return 0, err
+	}
+	return conn.Unlink(ctx, keys...).Result()
 }
 
 // Zadd is the implementation of redis zadd command.
@@ -2457,6 +2431,13 @@ func SetSlowThreshold(threshold time.Duration) {
 	slowThreshold.Set(threshold)
 }
 
+// WithHook customizes the given Redis with given durationHook.
+func WithHook(hook Hook) Option {
+	return func(r *Redis) {
+		r.hooks = append(r.hooks, hook)
+	}
+}
+
 // WithPass customizes the given Redis with given password.
 func WithPass(pass string) Option {
 	return func(r *Redis) {
@@ -2471,11 +2452,10 @@ func WithTLS() Option {
 	}
 }
 
-// WithHook customizes the given Redis with given durationHook, only for private use now,
-// maybe expose later.
-func WithHook(hook Hook) Option {
+// WithUser customizes the given Redis with given username.
+func WithUser(user string) Option {
 	return func(r *Redis) {
-		r.hooks = append(r.hooks, hook)
+		r.User = user
 	}
 }
 
